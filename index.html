@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TeslaMirror</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; height: 100vh; overflow: hidden; }
+
+    #connect-screen {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100vh; gap: 18px;
+    }
+    h1 { font-size: 30px; font-weight: 300; letter-spacing: 2px; }
+    .subtitle { font-size: 14px; color: #888; }
+
+    #room-input {
+      font-size: 36px; text-align: center; letter-spacing: 10px;
+      text-transform: uppercase; width: 260px; padding: 14px 20px;
+      background: #1a1a1a; border: 2px solid #333; border-radius: 14px;
+      color: #fff; outline: none; transition: border-color 0.2s;
+    }
+    #room-input:focus { border-color: #e31937; }
+
+    #connect-btn {
+      padding: 14px 48px; font-size: 18px; font-weight: 500;
+      background: #e31937; border: none; border-radius: 14px;
+      color: #fff; cursor: pointer; transition: background 0.2s;
+    }
+    #connect-btn:hover { background: #c01530; }
+    #connect-btn:active { background: #a0112a; }
+
+    #status { font-size: 14px; color: #888; min-height: 20px; }
+
+    /* Mirror screen */
+    #mirror-screen { display: none; position: fixed; inset: 0; background: #000; }
+
+    #mirror-canvas {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 100%; max-height: 100%;
+    }
+
+    #touch-overlay {
+      position: fixed; inset: 0;
+      touch-action: none; cursor: crosshair;
+      z-index: 10;
+    }
+
+    #hud {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; align-items: center; z-index: 20;
+      pointer-events: none;
+    }
+    .hud-pill {
+      padding: 5px 12px; border-radius: 20px;
+      background: rgba(0,0,0,0.6); font-size: 12px; color: rgba(255,255,255,0.6);
+      pointer-events: all;
+    }
+    #fps-label { pointer-events: none; }
+    #disconnect-btn { cursor: pointer; color: #e31937; }
+
+    /* Touch ripple */
+    .ripple {
+      position: fixed; pointer-events: none; border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      animation: ripple-out 0.4s ease-out forwards;
+      z-index: 30;
+    }
+    @keyframes ripple-out {
+      from { width: 0; height: 0; opacity: 1; margin: 0; }
+      to { width: 60px; height: 60px; opacity: 0; margin: -30px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="connect-screen">
+  <h1>TeslaMirror</h1>
+  <p class="subtitle">Enter the room code shown on your phone</p>
+  <input id="room-input" type="text" maxlength="6" placeholder="ABC123"
+         autocomplete="off" spellcheck="false" autocapitalize="characters">
+  <button id="connect-btn" onclick="connect()">Connect</button>
+  <p id="status"></p>
+</div>
+
+<div id="mirror-screen">
+  <canvas id="mirror-canvas"></canvas>
+  <div id="touch-overlay"></div>
+  <div id="hud">
+    <span class="hud-pill" id="fps-label">-- fps</span>
+    <span class="hud-pill" id="disconnect-btn" onclick="disconnect()">✕ Disconnect</span>
+  </div>
+</div>
+
+<script>
+  // Server URL is the same origin this page is loaded from
+  const SERVER_WS = location.origin.replace(/^http/, 'ws');
+
+  const canvas = document.getElementById('mirror-canvas');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('touch-overlay');
+  const fpsLabel = document.getElementById('fps-label');
+  const statusEl = document.getElementById('status');
+
+  let ws = null;
+  let frameCount = 0;
+  let fpsTimer = setInterval(() => {
+    fpsLabel.textContent = frameCount + ' fps';
+    frameCount = 0;
+  }, 1000);
+
+  function setStatus(msg, color = '#888') {
+    statusEl.textContent = msg;
+    statusEl.style.color = color;
+  }
+
+  // Auto-fill room code from URL query param (?room=ABC123)
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
+    if (room) document.getElementById('room-input').value = room.toUpperCase();
+  });
+
+  function connect() {
+    const roomCode = document.getElementById('room-input').value.trim().toUpperCase();
+    if (roomCode.length < 4) { setStatus('Enter a valid room code', '#e31937'); return; }
+
+    setStatus('Connecting...', '#888');
+    ws = new WebSocket(SERVER_WS);
+    ws.binaryType = 'blob';
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'join', room: roomCode, role: 'browser' }));
+      setStatus('Waiting for phone...', '#f5a623');
+    };
+
+    ws.onmessage = async (event) => {
+      if (event.data instanceof Blob) {
+        // Binary JPEG frame
+        const bmp = await createImageBitmap(event.data);
+        if (canvas.width !== bmp.width || canvas.height !== bmp.height) {
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+        }
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+        frameCount++;
+        return;
+      }
+
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'peer_ready') {
+        document.getElementById('connect-screen').style.display = 'none';
+        document.getElementById('mirror-screen').style.display = 'block';
+        setupTouchHandlers();
+      } else if (msg.type === 'peer_disconnected') {
+        showConnect('Phone disconnected');
+      }
+    };
+
+    ws.onclose = () => showConnect('Disconnected');
+    ws.onerror = () => setStatus('Connection error', '#e31937');
+  }
+
+  function disconnect() {
+    ws && ws.close();
+  }
+
+  function showConnect(msg) {
+    document.getElementById('connect-screen').style.display = 'flex';
+    document.getElementById('mirror-screen').style.display = 'none';
+    setStatus(msg, '#888');
+  }
+
+  function getCanvasCoords(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (clientX - r.left) / r.width)),
+      y: Math.max(0, Math.min(1, (clientY - r.top) / r.height))
+    };
+  }
+
+  function spawnRipple(clientX, clientY) {
+    const el = document.createElement('div');
+    el.className = 'ripple';
+    el.style.left = clientX + 'px';
+    el.style.top = clientY + 'px';
+    document.body.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  function setupTouchHandlers() {
+    let touchStartX, touchStartY, touchStartTime;
+
+    overlay.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      touchStartX = t.clientX; touchStartY = t.clientY;
+      touchStartTime = Date.now();
+    }, { passive: false });
+
+    overlay.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 12) {
+        // Tap
+        spawnRipple(t.clientX, t.clientY);
+        const c = getCanvasCoords(t.clientX, t.clientY);
+        ws.send(JSON.stringify({ type: 'touch', action: 'tap', x: c.x, y: c.y }));
+      } else {
+        // Swipe
+        const s = getCanvasCoords(touchStartX, touchStartY);
+        const end = getCanvasCoords(t.clientX, t.clientY);
+        ws.send(JSON.stringify({ type: 'swipe', x1: s.x, y1: s.y, x2: end.x, y2: end.y }));
+      }
+    }, { passive: false });
+
+    // Mouse support (for testing on desktop)
+    overlay.addEventListener('click', (e) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      spawnRipple(e.clientX, e.clientY);
+      const c = getCanvasCoords(e.clientX, e.clientY);
+      ws.send(JSON.stringify({ type: 'touch', action: 'tap', x: c.x, y: c.y }));
+    });
+  }
+</script>
+</body>
+</html>
