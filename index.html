@@ -37,9 +37,11 @@
     #mirror-screen { display: none; position: fixed; inset: 0; background: #000; }
 
     #mirror-canvas {
-      position: absolute; top: 50%; left: 50%;
+      position: absolute; 
+      top: 50%; 
+      left: 50%;
       transform: translate(-50%, -50%);
-      max-width: 100%; max-height: 100%;
+     
     }
 
     #touch-overlay {
@@ -146,8 +148,17 @@
         }
         ctx.drawImage(bmp, 0, 0);
         bmp.close();
+        fitcanvas();
         frameCount++;
         return;
+        function fitCanvas() {
+          if (canvas.width === 0) return;
+            const scale = Math.min(window.innerWidth /
+                                   canvas.width, window.innerHeight / canvas.height);
+          canvas.style.width = (canvas.width * scale) + 'px';
+          canvas.style.height = (canvas.height * scale) + 'px';
+        }
+        window.addEventListener('resize', fitCanvas);
       }
 
       const msg = JSON.parse(event.data);
