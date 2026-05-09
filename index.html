@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>TeslaMirror</title>
+  <style>
+    :root {
+      --bg: #0a0a0a; --surface: #161616; --surface2: #1e1e1e;
+      --accent: #e31937; --accent-dark: #b01328;
+      --text: #ffffff; --muted: #888888; --radius: 16px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; height:100vh; overflow:hidden; user-select:none; }
+
+    /* ── CONNECT ── */
+    #connect-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:20px; }
+    .logo { font-size:36px; font-weight:200; letter-spacing:3px; }
+    .logo b { color:var(--accent); font-weight:700; }
+    #room-input { font-size:40px; text-align:center; letter-spacing:12px; text-transform:uppercase; width:280px; padding:16px 20px; background:var(--surface); border:2px solid #2a2a2a; border-radius:var(--radius); color:var(--text); outline:none; transition:border-color .2s; }
+    #room-input:focus { border-color:var(--accent); }
+    #connect-btn { padding:16px 56px; font-size:18px; font-weight:500; background:var(--accent); border:none; border-radius:var(--radius); color:#fff; cursor:pointer; transition:background .15s,transform .1s; }
+    #connect-btn:active { background:var(--accent-dark); transform:scale(0.97); }
+    #connect-status { font-size:14px; color:var(--muted); min-height:20px; }
+
+    /* ── LAUNCHER ── */
+    #launcher-screen { display:none; flex-direction:column; height:100vh; padding:14px; gap:10px; }
+
+    .header { display:flex; align-items:center; justify-content:space-between; padding:0 4px; }
+    .header-logo { font-size:18px; font-weight:300; letter-spacing:2px; color:var(--muted); }
+    .header-logo b { color:var(--text); font-weight:700; }
+    #clock { font-size:26px; font-weight:300; }
+    .mirror-btn { display:flex; align-items:center; gap:8px; padding:10px 22px; background:var(--accent); border:none; border-radius:12px; color:#fff; font-size:15px; font-weight:500; cursor:pointer; transition:background .15s; }
+    .mirror-btn:active { background:var(--accent-dark); }
+
+    .controls-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .control-card { background:var(--surface); border-radius:var(--radius); padding:14px 18px; display:flex; align-items:center; gap:14px; }
+    .ctrl-icon { font-size:22px; flex-shrink:0; }
+    .ctrl-body { flex:1; }
+    .ctrl-label { font-size:11px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:.5px; }
+    .slider { width:100%; height:4px; -webkit-appearance:none; appearance:none; background:#2a2a2a; border-radius:2px; outline:none; cursor:pointer; }
+    .slider::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); cursor:pointer; }
+
+    .music-card { background:var(--surface); border-radius:var(--radius); padding:14px 24px; display:flex; align-items:center; gap:20px; }
+    .music-label { font-size:13px; color:var(--muted); margin-right:auto; }
+    .media-btn { background:var(--surface2); border:none; border-radius:50%; width:52px; height:52px; font-size:20px; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s,transform .1s; }
+    .media-btn:active { background:#2a2a2a; transform:scale(0.9); }
+    .media-btn.play { background:var(--accent); width:62px; height:62px; font-size:24px; }
+    .media-btn.play:active { background:var(--accent-dark); }
+
+    .quick-apps { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; flex:1; }
+    .app-btn { background:var(--surface); border:none; border-radius:var(--radius); padding:18px 10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; cursor:pointer; transition:background .15s,transform .1s; }
+    .app-btn:active { background:var(--surface2); transform:scale(0.95); }
+    .app-icon { width:60px; height:60px; border-radius:14px; }
+    .app-name { font-size:13px; color:var(--muted); font-weight:500; }
+
+    .all-apps-btn { background:var(--surface); border:none; border-radius:var(--radius); padding:16px; color:var(--text); font-size:16px; font-weight:500; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:10px; transition:background .15s; }
+    .all-apps-btn:active { background:var(--surface2); }
+
+    /* ── ALL APPS OVERLAY ── */
+    #all-apps-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:100; flex-direction:column; padding:14px; gap:12px; }
+    .overlay-header { display:flex; align-items:center; gap:10px; }
+    #app-search { flex:1; padding:12px 16px; background:var(--surface); border:1px solid #2a2a2a; border-radius:12px; color:var(--text); font-size:16px; outline:none; }
+    .close-btn { background:var(--surface); border:none; border-radius:12px; width:48px; height:48px; color:var(--text); font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+    .close-btn:active { background:var(--surface2); }
+    #apps-list { flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; align-content:start; padding-bottom:12px; }
+    .app-item { background:var(--surface); border:none; border-radius:12px; padding:16px 8px; display:flex; flex-direction:column; align-items:center; gap:10px; cursor:pointer; transition:background .15s; }
+    .app-item:active { background:var(--surface2); }
+    .app-avatar { width:50px; height:50px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#fff; }
+    .app-item-name { font-size:11px; color:var(--muted); text-align:center; line-height:1.3; max-height:2.6em; overflow:hidden; word-break:break-word; }
+    .list-loading { grid-column:1/-1; text-align:center; color:var(--muted); padding:40px; font-size:14px; }
+
+    /* ── MIRROR ── */
+    #mirror-screen { display:none; }
+    #mirror-canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; background:#000; }
+    #mirror-touch { position:fixed; inset:0; z-index:10; touch-action:none; }
+    #mirror-hud { position:fixed; top:12px; right:12px; display:flex; gap:8px; z-index:20; }
+    .hud-pill { padding:8px 16px; border-radius:20px; background:rgba(0,0,0,0.7); border:none; color:rgba(255,255,255,0.6); font-size:13px; cursor:pointer; }
+    #back-btn { color:var(--accent); }
+
+    .ripple { position:fixed; pointer-events:none; border-radius:50%; background:rgba(255,255,255,0.35); animation:ripple-out .4s ease-out forwards; z-index:30; }
+    @keyframes ripple-out { from { width:0;height:0;opacity:1;margin:0; } to { width:60px;height:60px;opacity:0;margin:-30px; } }
+  </style>
+</head>
+<body>
+
+<!-- CONNECT -->
+<div id="connect-screen">
+  <div class="logo">Tesla<b>Mirror</b></div>
+  <p style="color:#888;font-size:14px">Enter the room code shown on your phone</p>
+  <input id="room-input" type="text" maxlength="6" placeholder="ABC123" autocomplete="off" spellcheck="false" autocapitalize="characters">
+  <button id="connect-btn" onclick="connect()">Connect</button>
+  <p id="connect-status"></p>
+</div>
+
+<!-- LAUNCHER -->
+<div id="launcher-screen">
+  <div class="header">
+    <div class="header-logo">Tesla<b>Mirror</b></div>
+    <div id="clock">--:--</div>
+    <button class="mirror-btn" onclick="enterMirror()">📱 Mirror Screen</button>
+  </div>
+
+  <div class="controls-row">
+    <div class="control-card">
+      <span class="ctrl-icon">🔊</span>
+      <div class="ctrl-body">
+        <div class="ctrl-label">Volume</div>
+        <input type="range" class="slider" id="vol-slider" min="0" max="100" value="50" oninput="sendCmd({type:'set_volume',value:+this.value/100})">
+      </div>
+    </div>
+    <div class="control-card">
+      <span class="ctrl-icon">☀️</span>
+      <div class="ctrl-body">
+        <div class="ctrl-label">Brightness</div>
+        <input type="range" class="slider" id="bright-slider" min="0" max="100" value="80" oninput="sendCmd({type:'set_brightness',value:+this.value/100})">
+      </div>
+    </div>
+  </div>
+
+  <div class="music-card">
+    <span class="music-label">🎵 Music Controls</span>
+    <button class="media-btn" onclick="sendCmd({type:'media_prev'})">⏮</button>
+    <button class="media-btn play" onclick="sendCmd({type:'media_play_pause'})">⏯</button>
+    <button class="media-btn" onclick="sendCmd({type:'media_next'})">⏭</button>
+  </div>
+
+  <div class="quick-apps">
+    <button class="app-btn" onclick="launch('com.waze')">
+      <svg class="app-icon" viewBox="0 0 60 60"><rect width="60" height="60" rx="14" fill="#00D4FF"/>
+        <circle cx="30" cy="26" r="10" fill="white"/><circle cx="26" cy="23" r="2.5" fill="#00D4FF"/>
+        <circle cx="34" cy="23" r="2.5" fill="#00D4FF"/><path d="M24 29 Q30 35 36 29" stroke="#00D4FF" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M30 36 L26 48 L30 44 L34 48 Z" fill="white"/></svg>
+      <span class="app-name">Waze</span>
+    </button>
+    <button class="app-btn" onclick="launch('com.google.android.youtube')">
+      <svg class="app-icon" viewBox="0 0 60 60"><rect width="60" height="60" rx="14" fill="#FF0000"/>
+        <rect x="10" y="18" width="40" height="24" rx="8" fill="white"/>
+        <polygon points="24,22 24,38 42,30" fill="#FF0000"/></svg>
+      <span class="app-name">YouTube</span>
+    </button>
+    <button class="app-btn" onclick="launch('com.google.android.apps.maps')">
+      <svg class="app-icon" viewBox="0 0 60 60"><rect width="60" height="60" rx="14" fill="#ffffff"/>
+        <path d="M15 20 L30 8 L45 20 L45 52 L30 44 L15 52 Z" fill="#34A853"/>
+        <path d="M15 20 L30 8 L30 44 L15 52 Z" fill="#FBBC04"/>
+        <path d="M30 8 L45 20 L45 52 L30 44 Z" fill="#4285F4"/>
+        <circle cx="30" cy="28" r="7" fill="white"/>
+        <circle cx="30" cy="28" r="4" fill="#EA4335"/></svg>
+      <span class="app-name">Maps</span>
+    </button>
+    <button class="app-btn" onclick="launch('com.whatsapp')">
+      <svg class="app-icon" viewBox="0 0 60 60"><rect width="60" height="60" rx="14" fill="#25D366"/>
+        <path d="M30 10 C18.95 10 10 18.95 10 30 C10 33.8 11.05 37.35 12.9 40.35 L10 50 L19.9 47.15 C22.8 48.8 26.3 49.8 30 49.8 C41.05 49.8 50 40.85 50 29.8 C50 18.95 41.05 10 30 10 Z" fill="white"/>
+        <path d="M24 22 C23 22 21 23 20.5 25 C19.5 28 21 33 25 37 C29 41 34 42 37 41.5 C39 41 40.5 39 40.5 38 C40.5 37.5 38 36 37 35.5 C36.5 35.5 36 35.5 35.5 36.5 L34.5 37.5 C34 38 33.5 38 33 37.5 C32 37 29 35 27.5 32.5 C27 32 27 31.5 27.5 31 L28.5 30 C29 29.5 29 29 28.5 28.5 L26.5 24 C26 23 25 22 24 22 Z" fill="#25D366"/></svg>
+      <span class="app-name">WhatsApp</span>
+    </button>
+  </div>
+
+  <button class="all-apps-btn" onclick="openAllApps()">⊞ &nbsp; All Apps</button>
+</div>
+
+<!-- ALL APPS -->
+<div id="all-apps-overlay">
+  <div class="overlay-header">
+    <input id="app-search" type="text" placeholder="Search apps..." oninput="filterApps(this.value)">
+    <button class="close-btn" onclick="closeAllApps()">✕</button>
+  </div>
+  <div id="apps-list"><div class="list-loading">Loading apps from your phone…</div></div>
+</div>
+
+<!-- MIRROR -->
+<div id="mirror-screen">
+  <canvas id="mirror-canvas"></canvas>
+  <div id="mirror-touch"></div>
+  <div id="mirror-hud">
+    <span class="hud-pill" id="fps-label">-- fps</span>
+    <button class="hud-pill" id="back-btn" onclick="exitMirror()">← Launcher</button>
+  </div>
+</div>
+
+<script>
+  const SERVER_WS = location.origin.replace(/^http/, 'ws');
+  const canvas = document.getElementById('mirror-canvas');
+  const ctx = canvas.getContext('2d');
+  const mirrorTouch = document.getElementById('mirror-touch');
+
+  let ws = null, allApps = [], frameCount = 0, phoneAspect = 9/16, isMirror = false;
+
+  // Clock
+  function tick() {
+    const n = new Date();
+    document.getElementById('clock').textContent =
+      String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+  }
+  tick(); setInterval(tick, 1000);
+
+  // FPS
+  setInterval(() => { document.getElementById('fps-label').textContent = frameCount + ' fps'; frameCount = 0; }, 1000);
+
+  // Canvas
+  function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+
+  // Status
+  function setStatus(msg, color) { const el = document.getElementById('connect-status'); el.textContent = msg; el.style.color = color || '#888'; }
+
+  // Auto room code from URL
+  addEventListener('DOMContentLoaded', () => {
+    const r = new URLSearchParams(location.search).get('room');
+    if (r) document.getElementById('room-input').value = r.toUpperCase();
+  });
+
+  // Connect
+  function connect() {
+    const room = document.getElementById('room-input').value.trim().toUpperCase();
+    if (room.length < 4) { setStatus('Enter a valid room code', '#e31937'); return; }
+    setStatus('Connecting…', '#888');
+    ws = new WebSocket(SERVER_WS);
+    ws.binaryType = 'blob';
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type:'join', room, role:'browser' }));
+      setStatus('Waiting for phone…', '#f5a623');
+    };
+
+    ws.onmessage = async (ev) => {
+      if (ev.data instanceof Blob) {
+        if (!isMirror) return;
+        const bmp = await createImageBitmap(ev.data);
+        phoneAspect = bmp.width / bmp.height;
+        const cw = canvas.width, ch = canvas.height;
+        const scale = Math.min(cw / bmp.width, ch / bmp.height);
+        const dw = bmp.width * scale, dh = bmp.height * scale;
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, ch);
+        ctx.drawImage(bmp, (cw-dw)/2, (ch-dh)/2, dw, dh);
+        bmp.close(); frameCount++;
+        return;
+      }
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'peer_ready') { showLauncher(); }
+      else if (msg.type === 'peer_disconnected') { showConnect('Phone disconnected'); }
+      else if (msg.type === 'initial_state') {
+        if (msg.volume != null) document.getElementById('vol-slider').value = msg.volume * 100;
+        if (msg.brightness != null) document.getElementById('bright-slider').value = msg.brightness * 100;
+      }
+      else if (msg.type === 'app_list') { allApps = msg.apps || []; renderApps(allApps); }
+      else if (msg.type === 'volume_update') { document.getElementById('vol-slider').value = msg.value * 100; }
+    };
+
+    ws.onclose = () => showConnect('Disconnected');
+    ws.onerror = () => setStatus('Connection error', '#e31937');
+  }
+
+  function sendCmd(cmd) { ws && ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(cmd)); }
+  function launch(pkg) { sendCmd({ type:'launch_app', package:pkg }); }
+
+  // Views
+  function showLauncher() {
+    isMirror = false;
+    document.getElementById('connect-screen').style.display = 'none';
+    document.getElementById('launcher-screen').style.display = 'flex';
+    document.getElementById('mirror-screen').style.display = 'none';
+  }
+  function showConnect(msg) {
+    isMirror = false;
+    document.getElementById('connect-screen').style.display = 'flex';
+    document.getElementById('launcher-screen').style.display = 'none';
+    document.getElementById('mirror-screen').style.display = 'none';
+    setStatus(msg || '', '#888');
+  }
+  function enterMirror() {
+    isMirror = true;
+    document.getElementById('launcher-screen').style.display = 'none';
+    document.getElementById('mirror-screen').style.display = 'block';
+    setupMirrorTouch();
+  }
+  function exitMirror() { isMirror = false; showLauncher(); }
+
+  // All Apps
+  function openAllApps() {
+    document.getElementById('all-apps-overlay').style.display = 'flex';
+    if (allApps.length === 0) {
+      document.getElementById('apps-list').innerHTML = '<div class="list-loading">Loading apps from your phone…</div>';
+      sendCmd({ type:'get_apps' });
+    }
+  }
+  function closeAllApps() { document.getElementById('all-apps-overlay').style.display = 'none'; }
+  function filterApps(q) { renderApps(allApps.filter(a => a.name.toLowerCase().includes(q.toLowerCase()))); }
+
+  function avatarColor(name) {
+    const c = ['#e31937','#2196F3','#4CAF50','#FF9800','#9C27B0','#00BCD4','#FF5722','#795548'];
+    let h = 0; for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h<<5)-h);
+    return c[Math.abs(h) % c.length];
+  }
+
+  function renderApps(apps) {
+    const el = document.getElementById('apps-list');
+    if (!apps.length) { el.innerHTML = '<div class="list-loading">No apps found</div>'; return; }
+    el.innerHTML = apps.map(a => `
+      <button class="app-item" onclick="launch('${a.package}');closeAllApps()">
+        ${a.icon
+          ? `<img src="data:image/png;base64,${a.icon}" style="width:50px;height:50px;border-radius:12px">`
+          : `<div class="app-avatar" style="background:${avatarColor(a.name)}">${a.name[0].toUpperCase()}</div>`}
+        <span class="app-item-name">${a.name}</span>
+      </button>`).join('');
+  }
+
+  // Mirror touch
+  let tStartX, tStartY, touchSetup = false;
+  function setupMirrorTouch() {
+    if (touchSetup) return; touchSetup = true;
+    mirrorTouch.addEventListener('touchstart', e => { e.preventDefault(); tStartX = e.touches[0].clientX; tStartY = e.touches[0].clientY; }, { passive:false });
+    mirrorTouch.addEventListener('touchend', e => {
+      e.preventDefault();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const t = e.changedTouches[0];
+      const dist = Math.hypot(t.clientX - tStartX, t.clientY - tStartY);
+      if (dist < 12) { spawnRipple(t.clientX, t.clientY); ws.send(JSON.stringify({ type:'touch', action:'tap', ...toPhone(t.clientX,t.clientY) })); }
+      else { ws.send(JSON.stringify({ type:'swipe', ...toPhone(tStartX,tStartY,true), ...toPhone(t.clientX,t.clientY,false,true) })); }
+    }, { passive:false });
+    mirrorTouch.addEventListener('click', e => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      spawnRipple(e.clientX, e.clientY);
+      ws.send(JSON.stringify({ type:'touch', action:'tap', ...toPhone(e.clientX, e.clientY) }));
+    });
+  }
+
+  function toPhone(cx, cy, isStart, isEnd) {
+    const cw = canvas.width, ch = canvas.height;
+    const fw = Math.min(cw, ch * phoneAspect), fh = fw / phoneAspect;
+    const ox = (cw-fw)/2, oy = (ch-fh)/2;
+    const x = Math.max(0,Math.min(1,(cx-ox)/fw)), y = Math.max(0,Math.min(1,(cy-oy)/fh));
+    if (isStart) return { x1:x, y1:y };
+    if (isEnd)   return { x2:x, y2:y };
+    return { x, y };
+  }
+
+  function spawnRipple(x, y) {
+    const el = document.createElement('div'); el.className = 'ripple';
+    el.style.left = x+'px'; el.style.top = y+'px';
+    document.body.appendChild(el); el.addEventListener('animationend', () => el.remove());
+  }
+</script>
+</body>
+</html>
